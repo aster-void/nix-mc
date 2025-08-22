@@ -13,7 +13,6 @@
 
   mkSyncScript = {
     dataDir,
-    upstreamDir,
     symlinks,
     files,
     serverProperties ? null,
@@ -25,14 +24,13 @@
       '')
       symlinks;
 
-    # destructiveCopy: for paths we want to mirror exactly from upstream (common for mods if not symlink)
-    # (p may be contain "/"s so we must mkdir)
+    # files copied with this method can be written (but it will be reset next launch)
     filesScript =
       map (p: ''
         rm -rf -- ${lib.escapeShellArg "${dataDir}/${p}"} || true
-        if [ -e ${lib.escapeShellArg "${upstreamDir}/${p}"} ]; then
+        if [ -e ${lib.escapeShellArg "${p}"} ]; then
           mkdir -p $(dirname ${lib.escapeShellArg "${dataDir}/${p}"})
-          cp -a ${lib.escapeShellArg "${upstreamDir}/${p}"} ${lib.escapeShellArg "${dataDir}/${p}"}
+          cp -a ${lib.escapeShellArg "${p}"} ${lib.escapeShellArg "${dataDir}/${p}"}
         fi
       '')
       files;
@@ -74,7 +72,7 @@
     user,
     group,
   }: let
-    inherit (serverCfg) type dataDir upstreamDir environment extraExecStartArgs ExecStart ExecStartPre symlinks files serverProperties;
+    inherit (serverCfg) type dataDir environment extraExecStartArgs ExecStart ExecStartPre symlinks files serverProperties;
 
     exec = let
       # Forge/NeoForge: usually run.sh exists. Allow override via commandPath if provided.
@@ -83,7 +81,7 @@
         then toString ExecStart
         else if type == "bedrock"
         then "${dataDir}/bedrock_server"
-        else "${upstreamDir}/run.sh";
+        else "./run.sh";
       args =
         if extraExecStartArgs == null
         then []
@@ -94,7 +92,6 @@
     syncScript = mkSyncScript {
       inherit
         dataDir
-        upstreamDir
         symlinks
         files
         serverProperties
@@ -148,7 +145,7 @@ in {
     };
 
     servers = mkOption {
-      type = types.attrsOf (types.submodule ({name, config, ...}: {
+      type = types.attrsOf (types.submodule ({name, ...}: {
         options = {
           enable = mkOption {
             type = types.bool;
@@ -158,11 +155,6 @@ in {
           type = mkOption {
             type = types.enum ["forge" "neoforge" "bedrock"];
             description = "Server type.";
-          };
-
-          upstreamDir = mkOption {
-            type = types.path;
-            description = "Pre-installed upstream repository root (run.sh / libraries / bedrock_server etc.).";
           };
 
           dataDir = mkOption {
@@ -246,43 +238,57 @@ in {
 
   config = let
     minecraftCfg = config.services.minecraft;
-  in mkIf minecraftCfg.enable (mkMerge [
-    # ensure user and group exist
-    {
-      users.users.${minecraftCfg.user} = {
-        isSystemUser = true;
-        group = minecraftCfg.group;
-      };
-      users.groups.${minecraftCfg.group} = {};
-    }
+  in
+    mkIf minecraftCfg.enable (mkMerge [
+      # ensure user and group exist
+      {
+        users.users.${minecraftCfg.user} = {
+          isSystemUser = true;
+          group = minecraftCfg.group;
+        };
+        users.groups.${minecraftCfg.group} = {};
+      }
 
-    # One systemd service per defined server
-    {
-      systemd.services = lib.mapAttrs' (name: serverCfg:
-        let
-          svc = mkService {
-            inherit name serverCfg;
-            user = minecraftCfg.user;
-            group = minecraftCfg.group;
-          };
-        in lib.nameValuePair "minecraft-${name}" {
-          inherit (svc) description wantedBy after wants serviceConfig environment path;
-        }
-      ) (lib.filterAttrs (n: v: v.enable) minecraftCfg.servers);
-    }
+      # One systemd service per defined server
+      {
+        systemd.services = lib.mapAttrs' (
+          name: serverCfg: let
+            svc = mkService {
+              inherit name serverCfg;
+              user = minecraftCfg.user;
+              group = minecraftCfg.group;
+            };
+          in
+            lib.nameValuePair "minecraft-${name}" {
+              inherit (svc) description wantedBy after wants serviceConfig environment path;
+            }
+        ) (lib.filterAttrs (n: v: v.enable) minecraftCfg.servers);
+      }
 
-    # Firewall configuration
-    (mkIf minecraftCfg.openFirewall {
-      networking.firewall.allowedTCPPorts = lib.flatten (
-        lib.mapAttrsToList (name: serverCfg: 
-          let defaults = (defaultsFor serverCfg.type).ports; in
-          if serverCfg.ports.tcp != [] then serverCfg.ports.tcp else defaults.tcp
-        ) minecraftCfg.servers);
-      networking.firewall.allowedUDPPorts = lib.flatten (
-        lib.mapAttrsToList (name: serverCfg:
-          let defaults = (defaultsFor serverCfg.type).ports; in
-          if serverCfg.ports.udp != [] then serverCfg.ports.udp else defaults.udp
-        ) minecraftCfg.servers);
-    })
-  ]);
+      # Firewall configuration
+      (mkIf minecraftCfg.openFirewall {
+        networking.firewall.allowedTCPPorts = lib.flatten (
+          lib.mapAttrsToList (
+            name: serverCfg: let
+              defaults = (defaultsFor serverCfg.type).ports;
+            in
+              if serverCfg.ports.tcp != []
+              then serverCfg.ports.tcp
+              else defaults.tcp
+          )
+          minecraftCfg.servers
+        );
+        networking.firewall.allowedUDPPorts = lib.flatten (
+          lib.mapAttrsToList (
+            name: serverCfg: let
+              defaults = (defaultsFor serverCfg.type).ports;
+            in
+              if serverCfg.ports.udp != []
+              then serverCfg.ports.udp
+              else defaults.udp
+          )
+          minecraftCfg.servers
+        );
+      })
+    ]);
 }
