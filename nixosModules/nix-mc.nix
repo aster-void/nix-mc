@@ -5,7 +5,12 @@
   ...
 }: let
   cfg = config.services.minecraft;
-  inherit (lib) mkEnableOption mkOption types mkIf mkMerge concatStringsSep mapAttrsToList;
+  inherit (lib) mkEnableOption mkOption types mkIf mkMerge concatLines mapAttrsToList;
+
+  toKV = k: v:
+    if builtins.isBool v
+    then "${k}=${lib.boolToString v}"
+    else "${k}=${toString v}";
 
   mkSyncScript = {
     dataDir,
@@ -34,17 +39,18 @@
       files;
 
     # Generate server.properties if configured
-    serverPropertiesScript = 
-      if serverProperties == null then [] else [''
-        cat > ${lib.escapeShellArg "${dataDir}/server.properties"} << 'EOF'
-        ${concatStringsSep "\n" (mapAttrsToList (k: v: 
-          if builtins.isBool v then "${k}=${lib.boolToString v}"
-          else "${k}=${toString v}"
-        ) serverProperties)}
-        EOF
-      ''];
+    serverPropertiesScript =
+      if serverProperties == null
+      then []
+      else [
+        ''
+          cat > ${lib.escapeShellArg "${dataDir}/server.properties"} << 'EOF'
+          ${concatLines (mapAttrsToList toKV serverProperties)}
+          EOF
+        ''
+      ];
 
-    pre = concatStringsSep "\n" (filesScript ++ symlinkScript ++ serverPropertiesScript);
+    pre = concatLines (filesScript ++ symlinkScript ++ serverPropertiesScript);
   in
     pre;
 
@@ -67,7 +73,7 @@
     name,
     serverCfg,
   }: let
-    inherit (serverCfg) type dataDir upstreamDir environment extraExecStartArgs ExecStart ExecStartPre serverProperties;
+    inherit (serverCfg) type dataDir upstreamDir environment extraExecStartArgs ExecStart ExecStartPre symlinks files serverProperties;
 
     exec = let
       # Forge/NeoForge: usually run.sh exists. Allow override via commandPath if provided.
@@ -86,7 +92,6 @@
 
     syncScript = mkSyncScript {
       inherit
-        (serverCfg)
         dataDir
         upstreamDir
         symlinks
