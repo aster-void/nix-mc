@@ -188,8 +188,8 @@ in {
             default = null;
           };
           ExecStartPre = mkOption {
-            type = types.nullOr types.str;
-            default = null;
+            type = types.listOf types.str;
+            default = [];
           };
 
           extraExecStartArgs = mkOption {
@@ -204,8 +204,8 @@ in {
             description = "Symlink paths into dataDir (e.g., mods/config).";
           };
           files = mkOption {
-            type = types.attrsOf types.path;
-            default = {};
+            type = types.listOf types.str;
+            default = [];
             description = "Copy files/dirs into dataDir (server.properties etc.).";
           };
 
@@ -219,11 +219,11 @@ in {
               options = {
                 tcp = mkOption {
                   type = types.listOf types.int;
-                  default = (defaultsFor cfg.servers.${name}.type).ports.tcp;
+                  default = [];
                 };
                 udp = mkOption {
                   type = types.listOf types.int;
-                  default = (defaultsFor cfg.servers.${name}.type).ports.udp;
+                  default = [];
                 };
               };
             };
