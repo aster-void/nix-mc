@@ -12,6 +12,7 @@
     upstreamDir,
     symlinks,
     files,
+    serverProperties ? null,
   }: let
     # symlinks: { "mods" = "/srv/.../mods"; "config" = "/srv/.../config"; }
     symlinkScript =
@@ -32,7 +33,18 @@
       '')
       files;
 
-    pre = concatStringsSep "\n" (filesScript ++ symlinkScript);
+    # Generate server.properties if configured
+    serverPropertiesScript = 
+      if serverProperties == null then [] else [''
+        cat > ${lib.escapeShellArg "${dataDir}/server.properties"} << 'EOF'
+        ${concatStringsSep "\n" (mapAttrsToList (k: v: 
+          if builtins.isBool v then "${k}=${lib.boolToString v}"
+          else "${k}=${toString v}"
+        ) serverProperties)}
+        EOF
+      ''];
+
+    pre = concatStringsSep "\n" (filesScript ++ symlinkScript ++ serverPropertiesScript);
   in
     pre;
 
@@ -55,7 +67,7 @@
     name,
     serverCfg,
   }: let
-    inherit (serverCfg) type dataDir upstreamDir environment extraExecStartArgs ExecStart ExecStartPre;
+    inherit (serverCfg) type dataDir upstreamDir environment extraExecStartArgs ExecStart ExecStartPre serverProperties;
 
     exec = let
       # Forge/NeoForge: usually run.sh exists. Allow override via commandPath if provided.
@@ -72,13 +84,14 @@
     in
       [main] ++ args;
 
-    syncScrpit = mkSyncScript {
+    syncScript = mkSyncScript {
       inherit
         (serverCfg)
         dataDir
         upstreamDir
         symlinks
         files
+        serverProperties
         ;
     };
   in {
@@ -92,7 +105,7 @@
     ExecStartPre =
       ExecStartPre
       ++ [
-        syncScrpit
+        syncScript
       ];
     ExecStart = exec;
 
@@ -155,6 +168,14 @@ in {
             type = types.path;
             default = "/var/lib/minecraft/${name}";
             description = "Persistent data directory (worlds/logs etc.).";
+          };
+          serverProperties = mkOption {
+            type = types.nullOr (types.attrsOf (types.oneOf [
+              types.str
+              types.int
+              types.bool
+            ]));
+            default = null;
           };
 
           ExecStart = mkOption {
