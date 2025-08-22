@@ -4,7 +4,6 @@
   config,
   ...
 }: let
-  cfg = config.services.minecraft;
   inherit (lib) mkEnableOption mkOption types mkIf mkMerge concatLines mapAttrsToList;
 
   toKV = k: v:
@@ -72,6 +71,8 @@
   mkService = {
     name,
     serverCfg,
+    user,
+    group,
   }: let
     inherit (serverCfg) type dataDir upstreamDir environment extraExecStartArgs ExecStart ExecStartPre symlinks files serverProperties;
 
@@ -79,16 +80,16 @@
       # Forge/NeoForge: usually run.sh exists. Allow override via commandPath if provided.
       main =
         if ExecStart != null
-        then ExecStart
+        then toString ExecStart
         else if type == "bedrock"
-        then ["${dataDir}/bedrock_server"]
-        else ["${upstreamDir}/run.sh"];
+        then "${dataDir}/bedrock_server"
+        else "${upstreamDir}/run.sh";
       args =
         if extraExecStartArgs == null
         then []
         else extraExecStartArgs;
     in
-      [main] ++ args;
+      lib.escapeShellArgs ([main] ++ args);
 
     syncScript = mkSyncScript {
       inherit
@@ -107,16 +108,9 @@
     inherit environment;
     path = [pkgs.coreutils pkgs.findutils pkgs.util-linux pkgs.gnugrep pkgs.gawk pkgs.diffutils];
 
-    ExecStartPre =
-      ExecStartPre
-      ++ [
-        syncScript
-      ];
-    ExecStart = exec;
-
     serviceConfig = {
-      User = cfg.user;
-      Group = cfg.group;
+      User = user;
+      Group = group;
       StateDirectory = lib.removePrefix "/var/lib/" dataDir; # if under /var/lib, set as subdir; else ignored
       WorkingDirectory = dataDir;
       Restart = "on-failure";
@@ -128,6 +122,8 @@
       ReadWritePaths = [dataDir];
       AmbientCapabilities = "";
       CapabilityBoundingSet = "";
+      ExecStartPre = ExecStartPre ++ [syncScript];
+      ExecStart = exec;
     };
   };
 in {
@@ -152,7 +148,7 @@ in {
     };
 
     servers = mkOption {
-      type = types.attrsOf (types.submodule ({name, ...}: {
+      type = types.attrsOf (types.submodule ({name, config, ...}: {
         options = {
           enable = mkOption {
             type = types.bool;
@@ -248,30 +244,45 @@ in {
     };
   };
 
-  config = mkIf cfg.enable (mkMerge [
+  config = let
+    minecraftCfg = config.services.minecraft;
+  in mkIf minecraftCfg.enable (mkMerge [
     # ensure user and group exist
     {
-      users.users.${cfg.user} = {
+      users.users.${minecraftCfg.user} = {
         isSystemUser = true;
-        group = cfg.group;
+        group = minecraftCfg.group;
       };
-      users.groups.${cfg.group} = {};
+      users.groups.${minecraftCfg.group} = {};
     }
 
     # One systemd service per defined server
-    (let
-      mkOne = name: serverCfg: let
-        svc = mkService {
-          inherit name serverCfg;
-        };
-      in {
-        systemd.services."minecraft-${name}" = {
-          inherit (svc) description wantedBy after wants serviceConfig ExecStart ExecStartPre environment;
-        };
-        networking.firewall.allowedTCPPorts = mkIf (cfg.openFirewall && (serverCfg.ports.tcp != [])) serverCfg.ports.tcp;
-        networking.firewall.allowedUDPPorts = mkIf (cfg.openFirewall && (serverCfg.ports.udp != [])) serverCfg.ports.udp;
-      };
-    in
-      lib.mkMerge (lib.mapAttrsToList mkOne cfg.servers))
+    {
+      systemd.services = lib.mapAttrs' (name: serverCfg:
+        let
+          svc = mkService {
+            inherit name serverCfg;
+            user = minecraftCfg.user;
+            group = minecraftCfg.group;
+          };
+        in lib.nameValuePair "minecraft-${name}" {
+          inherit (svc) description wantedBy after wants serviceConfig environment path;
+        }
+      ) (lib.filterAttrs (n: v: v.enable) minecraftCfg.servers);
+    }
+
+    # Firewall configuration
+    (mkIf minecraftCfg.openFirewall {
+      networking.firewall.allowedTCPPorts = lib.flatten (
+        lib.mapAttrsToList (name: serverCfg: 
+          let defaults = (defaultsFor serverCfg.type).ports; in
+          if serverCfg.ports.tcp != [] then serverCfg.ports.tcp else defaults.tcp
+        ) minecraftCfg.servers);
+      networking.firewall.allowedUDPPorts = lib.flatten (
+        lib.mapAttrsToList (name: serverCfg:
+          let defaults = (defaultsFor serverCfg.type).ports; in
+          if serverCfg.ports.udp != [] then serverCfg.ports.udp else defaults.udp
+        ) minecraftCfg.servers);
+    })
   ]);
 }
