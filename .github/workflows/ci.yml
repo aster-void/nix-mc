@@ -16,3 +16,5 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
     - name: Run nix flake check
       run: nix flake check
+    - name: Test module evaluation with servers
+      run: nix-instantiate --eval tests/test-recursion.nix
