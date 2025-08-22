@@ -1,61 +1,61 @@
 # CLAUDE.md
 
-このファイルは、このリポジトリでコードを扱う際にClaude Code (claude.ai/code)へのガイダンスを提供します。
+This file provides guidance for Claude Code (claude.ai/code) when working with code in this repository.
 
-## プロジェクト概要
+## Project Overview
 
-これはMinecraftサーバー（Forge、NeoForge、Bedrock版）を実行するためのNixOSモジュールを提供するNix flakeです。このモジュールは適切なセキュリティ強化とファイル管理を備えたsystemdサービスを作成します。
+This is a Nix flake that provides NixOS modules for running Minecraft servers (Forge, NeoForge, and Bedrock). The module creates systemd services with proper security hardening and file management.
 
-## アーキテクチャ
+## Architecture
 
-**コアコンポーネント:**
-- `flake.nix`: NixOSモジュールを公開するエントリーポイント
-- `nixosModules/nix-mc.nix`: Minecraftサーバー管理を実装するメインNixOSモジュール
+**Core Components:**
+- `flake.nix`: Entry point that exposes the NixOS module
+- `nixosModules/nix-mc.nix`: Main NixOS module implementing Minecraft server management
 
-**主要な設計パターン:**
-- **関心の分離**: `upstreamDir`（読み取り専用サーバーファイル） vs `dataDir`（永続的ワールドデータ）
-- **セキュリティ強化**: Systemdサービスは`NoNewPrivileges`、`ProtectSystem=strict`、制限されたケーパビリティで実行
-- **ファイル同期戦略**: 異なるコンテンツタイプに対するシンボリックリンク vs ファイルコピーの設定可能な選択
-- **マルチサーバー対応**: 単一のモジュールが個別設定を持つ複数のサーバーインスタンスを管理
+**Key Design Patterns:**
+- **Separation of Concerns**: `upstreamDir` (read-only server files) vs `dataDir` (persistent world data)
+- **Security Hardening**: Systemd services run with `NoNewPrivileges`, `ProtectSystem=strict`, and restricted capabilities
+- **File Sync Strategy**: Configurable choice between symlinks vs file copying for different content types
+- **Multi-Server Support**: Single module manages multiple server instances with individual configurations
 
-**サービスアーキテクチャ:**
-- 各サーバーは独自の`minecraft-${name}` systemdサービスを持つ
-- サーバータイプごとの自動ファイアウォール管理（Java用TCP 25565、Bedrock用UDP 19132）
-- 事前開始同期スクリプトがupstreamからdataディレクトリへのファイル/シンボリックリンクセットアップを処理
+**Service Architecture:**
+- Each server has its own `minecraft-${name}` systemd service
+- Automatic firewall management per server type (TCP 25565 for Java, UDP 19132 for Bedrock)
+- Pre-start sync script handles file/symlink setup from upstream to data directory
 
-## 開発コマンド
+## Development Commands
 
-**モジュール構文のテスト:**
+**Test module syntax:**
 ```bash
 nix flake check
 ```
 
-**ビルド/評価:**
+**Build/evaluate:**
 ```bash
 nix eval .#nixosModules.nix-mc
 ```
 
-## 設定パターン
+## Configuration Patterns
 
-**サーバー定義構造:**
+**Server Definition Structure:**
 - `type`: "forge" | "neoforge" | "bedrock"
-- `upstreamDir`: プリインストールされたサーバーファイル（読み取り専用）
-- `dataDir`: 永続的ランタイムデータ（デフォルト: `/var/lib/minecraft/${name}`）
-- `symlinks`: シンボリックリンクするディレクトリ（例：mods、config）
-- `files`: 起動時にコピーするファイル/ディレクトリ（例：server.properties）
+- `upstreamDir`: Pre-installed server files (read-only)
+- `dataDir`: Persistent runtime data (default: `/var/lib/minecraft/${name}`)
+- `symlinks`: Directories to symlink (e.g., mods, config)
+- `files`: Files/directories to copy on startup (e.g., server.properties)
 
-**セキュリティモデル:**
-- サービスは専用の`minecraft`ユーザー/グループで実行
-- `ProtectSystem=strict`による厳格なファイルシステム分離
-- `dataDir`のみが書き込み可能
-- 昇格された権限やケーパビリティなし
+**Security Model:**
+- Services run as dedicated `minecraft` user/group
+- Strict filesystem isolation via `ProtectSystem=strict`
+- Only `dataDir` is writable
+- No elevated privileges or capabilities
 
-**ポートのデフォルト:**
-- Javaサーバー（forge/neoforge）: TCP 25565
-- Bedrockサーバー: UDP 19132
+**Port Defaults:**
+- Java servers (forge/neoforge): TCP 25565
+- Bedrock servers: UDP 19132
 
-## 主要関数
+## Key Functions
 
-- `mkSyncScript`: ファイル同期用の事前開始スクリプトを生成
-- `mkService`: サーバー用のsystemdサービス設定を作成
-- `defaultsFor`: タイプ固有のデフォルト（ポートなど）を提供
+- `mkSyncScript`: Generates pre-start script for file synchronization
+- `mkService`: Creates systemd service configuration for servers
+- `defaultsFor`: Provides type-specific defaults (ports, etc.)

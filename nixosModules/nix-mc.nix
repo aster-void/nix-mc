@@ -19,7 +19,7 @@
     files,
     serverProperties ? null,
   }: let
-    # symlinks: { "mods" = "/srv/.../mods"; "config" = "/srv/.../config"; }
+    # symlinks: { "mods" = "${flake-input}/mods"; "config" = "${flake-input}/config"; }
     symlinkScript =
       mapAttrsToList (dst: src: ''
         /run/current-system/sw/bin/ln -sfn ${lib.escapeShellArg src} ${lib.escapeShellArg "${dataDir}/${dst}"}
