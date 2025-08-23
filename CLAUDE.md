@@ -41,6 +41,16 @@ nix flake check
 nix eval .#nixosModules.nix-mc
 ```
 
+**Quality Requirements:**
+- All changes must pass `nix flake check` before commit
+- NixOS module must evaluate successfully without errors
+- Module syntax and structure must be valid Nix
+- Test module evaluation with nixos-rebuild:
+  ```bash
+  nixos-rebuild build --flake .#test
+  ```
+  This builds a complete NixOS system configuration to verify the module works in practice.
+
 ## Configuration Patterns
 
 **Server Definition Structure:**
