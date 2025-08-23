@@ -111,6 +111,7 @@
       pkgs.gnugrep
       pkgs.gawk
       pkgs.diffutils
+      pkgs.openjdk_headless
     ];
 
     serviceConfig = {
