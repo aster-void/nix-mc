@@ -12,6 +12,7 @@
     else "${k}=${toString v}";
 
   mkSyncScript = {
+    name,
     dataDir,
     symlinks,
     files,
@@ -20,7 +21,7 @@
     # symlinks: { "mods" = "${flake-input}/mods"; "config" = "${flake-input}/config"; }
     symlinkScript =
       mapAttrsToList (dst: src: ''
-        /run/current-system/sw/bin/ln -sfn ${lib.escapeShellArg src} ${lib.escapeShellArg "${dataDir}/${dst}"}
+        ln -sfn ${lib.escapeShellArg src} ${lib.escapeShellArg "${dataDir}/${dst}"}
       '')
       symlinks;
 
@@ -50,8 +51,12 @@
     prePath =
       pkgs.writeShellScript "exec-start-pre"
       (lib.concatLines
-        (filesScript
-          ++ symlinkScript ++ serverPropertiesScript));
+        ([
+          "mkdir -p /run/minecraft"
+          "rm -f /run/minecraft/${name}.sock"
+        ]
+        ++ filesScript
+        ++ symlinkScript ++ serverPropertiesScript));
   in
     prePath;
 
@@ -95,6 +100,7 @@
 
     syncScript = mkSyncScript {
       inherit
+        name
         dataDir
         symlinks
         files
@@ -133,13 +139,7 @@
       ReadWritePaths = [dataDir "/run/minecraft"];
       AmbientCapabilities = "";
       CapabilityBoundingSet = "";
-      ExecStartPre =
-        ExecStartPre
-        ++ [syncScript]
-        ++ [
-          "mkdir -p /run/minecraft"
-          "rm -f /run/minecraft/${name}.sock"
-        ];
+      ExecStartPre = ExecStartPre ++ [syncScript];
       ExecStart = "tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}";
       ExecStopPost = "tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true";
     };
