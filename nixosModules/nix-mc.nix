@@ -108,6 +108,7 @@
     wants = ["network-online.target"];
     inherit environment;
     path = [
+      pkgs.tmux
       pkgs.coreutils
       pkgs.bash
       pkgs.findutils
@@ -129,11 +130,12 @@
       PrivateTmp = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [dataDir];
+      ReadWritePaths = [dataDir "/run/minecraft"];
       AmbientCapabilities = "";
       CapabilityBoundingSet = "";
-      ExecStartPre = ExecStartPre ++ [syncScript];
-      ExecStart = exec;
+      ExecStartPre = ExecStartPre ++ [syncScript] ++ ["+${pkgs.coreutils}/bin/mkdir -p /run/minecraft"];
+      ExecStart = "${pkgs.tmux}/bin/tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}";
+      ExecStopPost = "${pkgs.tmux}/bin/tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true";
     };
   };
 in {
@@ -260,6 +262,11 @@ in {
           group = minecraftCfg.group;
         };
         users.groups.${minecraftCfg.group} = {};
+        
+        # Create runtime directory for tmux sockets
+        systemd.tmpfiles.rules = [
+          "d /run/minecraft 0755 ${minecraftCfg.user} ${minecraftCfg.group} -"
+        ];
       }
 
       # One systemd service per defined server
