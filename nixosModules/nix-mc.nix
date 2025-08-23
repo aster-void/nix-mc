@@ -47,9 +47,13 @@
         ''
       ];
 
-    pre = concatLines (filesScript ++ symlinkScript ++ serverPropertiesScript);
+    prePath =
+      pkgs.writeShellScript "exec-start-pre"
+      (lib.concatLines
+        (filesScript
+          ++ symlinkScript ++ serverPropertiesScript));
   in
-    pre;
+    prePath;
 
   # Defaults per server type
   defaultsFor = t: {
