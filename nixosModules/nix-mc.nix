@@ -133,9 +133,15 @@
       ReadWritePaths = [dataDir "/run/minecraft"];
       AmbientCapabilities = "";
       CapabilityBoundingSet = "";
-      ExecStartPre = ExecStartPre ++ [syncScript] ++ ["+${pkgs.coreutils}/bin/mkdir -p /run/minecraft"];
-      ExecStart = "${pkgs.tmux}/bin/tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}";
-      ExecStopPost = "${pkgs.tmux}/bin/tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true";
+      ExecStartPre =
+        ExecStartPre
+        ++ [syncScript]
+        ++ [
+          "mkdir -p /run/minecraft"
+          "rm -f /run/minecraft/${name}.sock"
+        ];
+      ExecStart = "tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}";
+      ExecStopPost = "tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true";
     };
   };
 in {
@@ -262,7 +268,7 @@ in {
           group = minecraftCfg.group;
         };
         users.groups.${minecraftCfg.group} = {};
-        
+
         # Create runtime directory for tmux sockets
         systemd.tmpfiles.rules = [
           "d /run/minecraft 0755 ${minecraftCfg.user} ${minecraftCfg.group} -"

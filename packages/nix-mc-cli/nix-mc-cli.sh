@@ -50,7 +50,7 @@ check_socket_dir() {
 
 # Get list of available servers from socket files
 get_servers() {
-    find "$SOCKET_DIR" -name "*.sock" -type S 2>/dev/null | \
+    find "$SOCKET_DIR" -name "*.sock" -type s 2>/dev/null | \
         sed "s|$SOCKET_DIR/||g; s|\.sock$||g" | \
         sort
 }
