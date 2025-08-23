@@ -281,6 +281,7 @@ in {
           in
             lib.nameValuePair "minecraft-${name}" {
               inherit (svc) description wantedBy after wants serviceConfig environment path;
+              restartIfChanged = true;
             }
         ) (lib.filterAttrs (n: v: v.enable) minecraftCfg.servers);
       }
