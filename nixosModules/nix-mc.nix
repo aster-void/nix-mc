@@ -107,6 +107,14 @@
         serverProperties
         ;
     };
+
+    startScript = pkgs.writeShellScript "minecraft-start-${name}" ''
+      exec tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}
+    '';
+
+    stopScript = pkgs.writeShellScript "minecraft-stop-${name}" ''
+      tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true
+    '';
   in {
     description = "Minecraft ${type} server (${name})";
     wantedBy = ["multi-user.target"];
@@ -140,8 +148,8 @@
       AmbientCapabilities = "";
       CapabilityBoundingSet = "";
       ExecStartPre = ExecStartPre ++ [syncScript];
-      ExecStart = "tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}";
-      ExecStopPost = "tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true";
+      ExecStart = startScript;
+      ExecStopPost = stopScript;
     };
   };
 in {
