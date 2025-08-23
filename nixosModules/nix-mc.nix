@@ -110,8 +110,10 @@
 
     startScript = pkgs.writeShellScript "minecraft-start-${name}" ''
       tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}
-      # Keep the service running by attaching to the session (read-only)
-      exec tmux -S /run/minecraft/${name}.sock attach-session -t mc-${name}
+      # Keep the service running by waiting for the tmux session to end
+      while tmux -S /run/minecraft/${name}.sock has-session -t mc-${name} 2>/dev/null; do
+        sleep 5
+      done
     '';
 
     stopScript = pkgs.writeShellScript "minecraft-stop-${name}" ''
