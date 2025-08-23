@@ -52,11 +52,11 @@
       pkgs.writeShellScript "exec-start-pre"
       (lib.concatLines
         ([
-          "mkdir -p /run/minecraft"
-          "rm -f /run/minecraft/${name}.sock"
-        ]
-        ++ filesScript
-        ++ symlinkScript ++ serverPropertiesScript));
+            "mkdir -p /run/minecraft"
+            "rm -f /run/minecraft/${name}.sock"
+          ]
+          ++ filesScript
+          ++ symlinkScript ++ serverPropertiesScript));
   in
     prePath;
 
@@ -81,22 +81,14 @@
     user,
     group,
   }: let
-    inherit (serverCfg) type dataDir environment extraExecStartArgs startScript ExecStartPre symlinks files serverProperties;
+    inherit (serverCfg) type dataDir environment startScript ExecStartPre symlinks files serverProperties;
 
-    exec = let
-      # Default start scripts by server type
-      main =
-        if startScript != null
-        then toString startScript
-        else if type == "bedrock"
-        then "${dataDir}/bedrock_server"
-        else "./run.sh";
-      args =
-        if extraExecStartArgs == null
-        then []
-        else extraExecStartArgs;
-    in
-      lib.escapeShellArgs ([main] ++ args);
+    main =
+      if startScript != null
+      then toString startScript
+      else if type == "bedrock"
+      then "./bedrock_server"
+      else "./run.sh";
 
     syncScript = mkSyncScript {
       inherit
@@ -108,30 +100,26 @@
         ;
     };
 
-    startScript = pkgs.writeShellScript "minecraft-start-${name}" ''
+    start = pkgs.writeShellScript "minecraft-start-${name}" ''
       # Ensure tmux session doesn't already exist
       tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} 2>/dev/null || true
-      
+
       # Create tmux session and verify it started successfully
-      if ! tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}; then
+      if ! tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${main}; then
         echo "Failed to create tmux session for ${name}"
         exit 1
       fi
-      
+
       # Verify the session actually exists before entering the wait loop
       if ! tmux -S /run/minecraft/${name}.sock has-session -t mc-${name} 2>/dev/null; then
         echo "Tmux session mc-${name} was not created successfully"
         exit 1
       fi
-      
+
       # Keep the service running by waiting for the tmux session to end
       while tmux -S /run/minecraft/${name}.sock has-session -t mc-${name} 2>/dev/null; do
         sleep 5
       done
-    '';
-
-    stopScript = pkgs.writeShellScript "minecraft-stop-${name}" ''
-      tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true
     '';
   in {
     description = "Minecraft ${type} server (${name})";
@@ -166,8 +154,10 @@
       AmbientCapabilities = "";
       CapabilityBoundingSet = "";
       ExecStartPre = ExecStartPre ++ [syncScript];
-      ExecStart = startScript;
-      ExecStopPost = stopScript;
+      ExecStart = start;
+      ExecStopPost = pkgs.writeShellScript "minecraft-stop-${name}" ''
+        tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} || true
+      '';
     };
   };
 in {
@@ -226,11 +216,6 @@ in {
           ExecStartPre = mkOption {
             type = types.listOf types.str;
             default = [];
-          };
-
-          extraExecStartArgs = mkOption {
-            type = types.listOf types.str;
-            default = ["nogui"];
           };
 
           # Sync policy
