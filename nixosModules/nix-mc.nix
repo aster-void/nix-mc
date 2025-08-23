@@ -103,7 +103,15 @@
     after = ["network-online.target"];
     wants = ["network-online.target"];
     inherit environment;
-    path = [pkgs.coreutils pkgs.findutils pkgs.util-linux pkgs.gnugrep pkgs.gawk pkgs.diffutils];
+    path = [
+      pkgs.coreutils
+      pkgs.bash
+      pkgs.findutils
+      pkgs.util-linux
+      pkgs.gnugrep
+      pkgs.gawk
+      pkgs.diffutils
+    ];
 
     serviceConfig = {
       User = user;
