@@ -278,6 +278,7 @@ in {
         users.users.${minecraftCfg.user} = {
           isSystemUser = true;
           group = minecraftCfg.group;
+          shell = pkgs.bash;
         };
         users.groups.${minecraftCfg.group} = {};
 
