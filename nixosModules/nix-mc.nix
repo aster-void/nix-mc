@@ -81,13 +81,13 @@
     user,
     group,
   }: let
-    inherit (serverCfg) type dataDir environment extraExecStartArgs ExecStart ExecStartPre symlinks files serverProperties;
+    inherit (serverCfg) type dataDir environment extraExecStartArgs startScript ExecStartPre symlinks files serverProperties;
 
     exec = let
-      # Forge/NeoForge: usually run.sh exists. Allow override via commandPath if provided.
+      # Default start scripts by server type
       main =
-        if ExecStart != null
-        then toString ExecStart
+        if startScript != null
+        then toString startScript
         else if type == "bedrock"
         then "${dataDir}/bedrock_server"
         else "./run.sh";
@@ -109,7 +109,21 @@
     };
 
     startScript = pkgs.writeShellScript "minecraft-start-${name}" ''
-      tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}
+      # Ensure tmux session doesn't already exist
+      tmux -S /run/minecraft/${name}.sock kill-session -t mc-${name} 2>/dev/null || true
+      
+      # Create tmux session and verify it started successfully
+      if ! tmux -S /run/minecraft/${name}.sock new-session -s mc-${name} -c ${dataDir} -d ${exec}; then
+        echo "Failed to create tmux session for ${name}"
+        exit 1
+      fi
+      
+      # Verify the session actually exists before entering the wait loop
+      if ! tmux -S /run/minecraft/${name}.sock has-session -t mc-${name} 2>/dev/null; then
+        echo "Tmux session mc-${name} was not created successfully"
+        exit 1
+      fi
+      
       # Keep the service running by waiting for the tmux session to end
       while tmux -S /run/minecraft/${name}.sock has-session -t mc-${name} 2>/dev/null; do
         sleep 5
@@ -204,9 +218,10 @@ in {
             default = null;
           };
 
-          ExecStart = mkOption {
+          startScript = mkOption {
             type = types.nullOr types.path;
             default = null;
+            description = "Path to the start script (e.g., ./run.sh, ./start.sh). Defaults to ./run.sh for forge/neoforge, bedrock_server for bedrock.";
           };
           ExecStartPre = mkOption {
             type = types.listOf types.str;
